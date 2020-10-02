@@ -16,9 +16,18 @@ The ground_countries dataset has the details regarding the country the ground be
 ## Preprocessing Data
 Although the data has no missing values, the Countries column has details of both playing teams in one column and the Result column has information regarding the winner along with the details of the win. These records were transformed to obtain playing teams in two different columns and the winner in the other column. Also, records that have no result has been dropped from the dataset.
 The matches data set has details regarding the ground venue, we have joined this dataset with ground_countries dataset to fetch the country the match is played in. After performing the necessary steps, the dataset is now in the below format.
+
+![image](https://user-images.githubusercontent.com/62916741/94977416-4150d780-04de-11eb-8dbe-9f1af9d97a66.png)
+
+
 ## Emperical Analysis
 We have used Support vector machine algorithm with linear, radial and polynomial kernels and Random Forests models on our datasets to make predictions.
-Our model is a supervised model and belongs to a classification task since the output is a categorical value. Input variables are the two teams participating in the match and the variable indicating if the team 1 is playing in its home ground. We have assigned 1 to the home ground column if team1 is Australia (Since Australia is the host country) else we assigned 0 to the home ground column. Our inputs are of the categorical data type. Hence, we used one-hot encoding to convert the categorical variables into the numerical format for the machine learning output. 
+Our model is a supervised model and belongs to a classification task since the output is a categorical value. Input variables are the two teams participating in the match and the variable indicating if the team 1 is playing in its home ground. We have assigned 1 to the home ground column if team1 is Australia (Since Australia is the host country) else we assigned 0 to the home ground column. Our inputs are of the categorical data type. Hence, we used one-hot encoding to convert the categorical variables into the numerical format for the machine learning output.After tuning the hyperparameters below are the test and train accuracy results of the best models.
+
+![image](https://user-images.githubusercontent.com/62916741/94977459-6c3b2b80-04de-11eb-9801-68bc6964d03b.png)
+
+After considering the above models we have selected random forest as our final model to make predictions on the upcoming T20 world cup matches.
+
 ## Conclusion
 After performing predictions on the qualifiers, Sri Lanka and Ireland remained at top 2 positions from Group A; Bangladesh and Namibia remained at the top 2 from Group B. These four teams advance to further rounds.
 We further performed predictions on the super 12 matches, and we obtained the below results:
