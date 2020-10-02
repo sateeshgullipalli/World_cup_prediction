@@ -1,0 +1,496 @@
+---
+title: "Project"
+author: "Sateesh"
+date: "3/4/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages, message=FALSE}
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(e1071, ggplot2, caret, rmarkdown, corrplot , tidyverse , readxl , dplyr , plyr , randomForest,RcppEigen,ranger,nnet,onehot)
+```
+Importing the dataset:
+
+```{r}
+matches <- read.csv("T20Fixtures.csv")
+```
+
+Data Manipulation:
+
+```{r}
+colnames(matches)[1] <- c("Date")
+matches <- matches[,-c(1)]
+```
+
+Removing the records with no result 
+
+```{r}
+str(matches)
+matches$Countries <- as.character(matches$Countries)
+matches$Result <- as.character(matches$Result)
+col <- matches[matches$Result == "Match abandoned" | matches$Result == "No result" | matches$Result == "Match Tied" ,]
+matches <- anti_join(matches,col)
+```
+
+Performing string operations to extract the playing two countries from a single column and also the winner 
+
+```{r}
+out <- strsplit(matches$Countries , "v. " , fixed =TRUE)
+out <- unlist(out)
+matches$team1<- out[c(seq(1,length(out),2))]
+matches$team2 <- out[c(seq(2,length(out),2))]
+out1 <- strsplit(matches$Result , "won" )
+out1 <- unlist(out1)
+matches$team1 <- str_trim(matches$team1)
+matches$team2 <- str_trim(matches$team2)
+matches$winner <- out1[c(seq(1,length(out),2))]
+matches <- matches[,c(2,4,5,6)]
+matches$winner <- str_trim(matches$winner)
+```
+
+EDA
+
+Checking the number of matches that are played by each team:
+
+```{r}
+matches$team1 <- as.factor(matches$team1)
+matches$team2 <- as.factor(matches$team2)
+matches$winner <- as.factor(matches$winner)
+```
+
+Number of matches each team has won: 
+
+```{r}
+ggplot(data = matches , aes( x = winner))+
+  geom_bar()+
+  theme(axis.text.x=element_text(size=8, angle=90))+
+  xlab("Team")+
+  ylab("Number of matches")+
+  ggtitle("Matches Won by each team")
+```
+Winning percentage of each team:
+
+```{r}
+team1_matches <- as.data.frame(table(matches$team1))
+team2_matches <- as.data.frame(table(matches$team2))
+colnames(team1_matches) <- c("team","match1")
+colnames(team2_matches) <- c("team","match2")
+#team1_matches <- merge(x = team1_matches,y = team2_matches, by = "team" ,all = TRUE)
+ total_matches <- merge(team1_matches,team2_matches , by = "team" , all = TRUE)
+ total_matches[is.na(total_matches)] <- 0
+ total_matches$match1 <- total_matches$match1+total_matches$match2
+ total_matches <- total_matches[,c(1,2)]
+ colnames(total_matches) <- c("Team" , "MatchesPlayed")
+ total_matches_won <- as.data.frame(table(matches$winner))
+ colnames(total_matches_won) <- c("Team","MatchesWon")
+ Final_Stats <- merge(total_matches , total_matches_won , by = "Team" , all = TRUE)
+ Final_Stats[is.na(Final_Stats)] <- 0
+```
+
+```{r}
+Final_Stats$Per <- round((Final_Stats$MatchesWon / Final_Stats$MatchesPlayed) * 100) 
+ggplot(data = Final_Stats , aes( x = Team , y = Per))+
+  geom_bar(stat = "identity")+
+  theme(axis.text.x=element_text(size=9, angle=90))+
+  xlab("Team")+
+  ylab("Percentage")+
+  ggtitle("Teams with their winning percentage")
+```
+Teams that played more than 30 matches:
+
+```{r}
+Final_Stats$Per <- round((Final_Stats$MatchesWon / Final_Stats$MatchesPlayed) * 100) 
+ggplot(data = Final_Stats[Final_Stats$MatchesPlayed >= 30,] , aes( x = Team , y = Per))+
+  geom_bar(stat = "identity")+
+  theme(axis.text.x=element_text(size=9, angle=90))+
+  xlab("Team")+
+  ylab("Percentage")+
+  ggtitle("Teams with their winning percentage")
+
+```
+MOst matches played between two teams:
+
+```{r}
+team_matches <- as.data.frame(table(matches$team1,matches$team2))
+team_matches <- team_matches[team_matches$Freq != 0,]
+colnames(team_matches) <- c("Team1", "Team2" , "Matches Played") 
+team_matches[order(-team_matches$`Matches Played`),]
+```
+Checking the number of matches won by teams in the grounds
+```{r}
+ground_stats <- data.frame(table(matches$Ground,matches$winner))
+ggplot(data = ground_stats[ground_stats$Var2 == "India" & ground_stats$Freq >1  ,],aes(x = Var1 , y = Freq))+
+  geom_bar(stat = "identity")+
+  theme(axis.text.x=element_text(size=8, angle=90))+
+  ylab("No of matches played")+
+  xlab("Ground")+
+  ggtitle("Matches played by India at respective grounds")
+```
+Loading the File having the details regarding the countries ground belong to  
+```{r}
+ground_countries <- read.csv("Ground_details.csv")
+head(ground_countries)
+names(ground_countries)[1] <- "Ground"
+head(ground_countries)
+```
+
+
+```{r}
+matches1 <- matches %>% left_join(ground_countries,by = ("Ground"))
+str(matches1)
+```
+
+
+```{r}
+matches1$team1 <- as.character(matches1$team1)
+matches1$team2 <- as.character(matches1$team2)
+matches1$Country <- as.character(matches1$Country)
+```
+
+Creating a new variable called home_ground which would be 0 for away game and 1 for home game(team1 is considered as base team here)
+```{r}
+matches1$home_ground <- 0
+matches1$home_ground[matches1$team1 == matches1$Country] <- 1
+matches1$home_ground[matches1$team2 == matches1$Country] <- 2
+```
+```{r}
+matches1 <- matches1[,-c(1,5)]
+```
+```{r}
+##home_away_stats <-(table(matches1$winner,matches1$home_ground))
+```
+
+Below is the final dataframe which would be used for Machine learning
+```{r}
+head(matches1)
+str(matches1)
+matches1$team1 <- as.factor(matches1$team1)
+matches1$team2 <- as.factor(matches1$team2)
+matches1$home_ground <- as.factor(matches1$home_ground)
+```
+```{r}
+matches2 <- matches1
+```
+
+Feature engineering :
+```{r}
+sum(is.na(matches1))
+dmy <- dummyVars(~team1, data = matches1)
+trsf1 <- data.frame(predict(dmy, newdata = matches1))
+dmy <- dummyVars(~team2, data = matches1)
+trsf2 <- data.frame(predict(dmy, newdata = matches1))
+matches1 <- cbind(matches1,trsf1,trsf2)
+matches1 <- matches1[,c(-1,-2)]
+```
+```{r}
+set.seed(123)
+trainindex <- createDataPartition(matches1$winner, p=0.8, list= FALSE)
+matches_train <- matches1[trainindex, ]
+matches_test <- matches1[-trainindex, ]
+```
+### SVM Linear deafult
+```{r}
+svm_linear <- svm(winner~., data = matches_train , cost = 0.01 , kernel = "linear")
+summary(svm_linear)
+```
+```{r}
+pred <- predict(svm_linear,matches_train)
+conf.matrix1 <- table(pred,matches_train$winner)
+accuracy_svm_linear <- (sum(diag(conf.matrix1))) / sum(conf.matrix1)
+accuracy_svm_linear
+```
+### Best Linear SVM
+```{r}
+tunesvm2 <- tune(svm,winner~., scale = FALSE,data = matches_train, kernel = "linear" ,
+     ranges = list(epsilon = seq(0,1,0.25), cost = 2^(2:5) , degree = seq(2,5)))
+```
+```{r}
+svm_linear <- tunesvm2$best.model
+summary(svm_linear)
+```
+
+```{r}
+bestpred1 <- predict(svm_linear, matches_train)
+conf.matrix1 <- table(bestpred1,matches_train$winner)
+svm_linear_train_acc <- (sum(diag(conf.matrix1))) / sum(conf.matrix1)
+test_pred <- predict(svm_linear, matches_test)
+conf.matrix2 <- table(test_pred,matches_test$winner)
+svm_linear_test_acc <- (sum(diag(conf.matrix2))) / sum(conf.matrix2)
+round(svm_linear_train_acc,3)
+round(svm_linear_test_acc,3)
+```
+### Polynomial SVM
+```{r}
+tunesvm2 <- tune(svm,winner~., scale = FALSE,data = matches_train, kernel = "polynomial" ,
+     ranges = list(epsilon = seq(0,1,0.25), cost = 2^(2:5) , degree = seq(2,5)))
+```
+```{r}
+tunesvm2$best.parameters
+bestsvm2 <- tunesvm2$best.model
+summary(bestsvm2)
+bestpred2 <- predict(bestsvm2, matches_train)
+```
+```{r}
+conf.matrix3 <- table(Predicted = bestpred2, Actual = matches_train$winner)
+accuracy3 <- (sum(diag(conf.matrix3))) / sum(conf.matrix3)
+accuracy3
+```
+### Radial SVM
+```{r}
+tunesvm3 <- tune(svm,winner~., scale = FALSE,data = matches_train, kernel = "radial" ,
+     ranges = list(epsilon = seq(0,1,0.25), cost = 2^(2:7)))
+```
+```{r}
+radial_svm <- tunesvm3$best.model
+summary(radial_svm)
+```
+Radial kernel accuracy
+```{r}
+bestpred3 <- predict(radial_svm, matches_train)
+conf.matrix4 <- table(Predicted = bestpred3, Actual = matches_train$winner)
+radial_svm_train_acc <- (sum(diag(conf.matrix4))) / sum(conf.matrix4)
+radial_test_pred <- predict(radial_svm,matches_test)
+conf.matrix5 <- table(Predicted = radial_test_pred, Actual = matches_test$winner)
+radial_svm_test_acc <- (sum(diag(conf.matrix5))) / sum(conf.matrix5)
+radial_svm_train_acc
+radial_svm_test_acc
+```
+### Random Forests
+```{r}
+rf_fit <- train(winner ~ ., 
+                data = matches_train, 
+                method = "ranger")
+
+```
+Random Forests Train
+```{r}
+train_pred <- predict(rf_fit,matches_train)
+conf.matrix4 <- table(Predicted = train_pred, Actual = matches_train$winner)
+rf_train_acc <- (sum(diag(conf.matrix4))) / sum(conf.matrix4)
+test_pred <- predict(rf_fit,matches_test)
+conf.matrix4 <- table(Predicted = test_pred, Actual = matches_test$winner)
+rf_test_acc <- (sum(diag(conf.matrix4))) / sum(conf.matrix4)
+rf_train_acc
+rf_test_acc
+```
+### Evaluating the results
+```{r}
+models <- data.frame("models" = c("SVM Linear","SVM Radial","Random Forests") , "Train accuracy" = c(svm_linear_train_acc,radial_svm_train_acc,rf_train_acc) , "Test accuracy" = c(svm_linear_test_acc,radial_svm_test_acc,rf_test_acc))
+models
+```
+Testing on the world cup fixtures
+Stage 1 
+
+Importing the second worsksheet of 2020 t20 worldcup fixtures
+```{r}
+fixtures <- read_excel("World_cup_Fixtures.xlsx")
+```
+```{r}
+fixtures$Team1 <- str_trim(fixtures$Team1)
+fixtures$Team2 <- str_trim(fixtures$Team2)
+teams <- distinct(fixtures,fixtures$Team1)
+teams1 <- distinct(fixtures,fixtures$Team2)
+names(teams1) <- names(teams)
+teams <- rbind(teams , teams1)
+names(teams) <- "team"
+teams <- distinct(teams)
+teams <- teams[teams$team != "A1" & teams$team !="A2" & teams$team !="B1" & teams$team !="B2",]
+par_teams <- teams$team
+```
+Predicting winners from Qualifiers
+```{r}
+QF <- fixtures %>% filter(Round == "Qualifier A" | Round == "Qualifier B")
+#QFA <- QFA[,c(2,3)]
+str(QF)
+QF$home_ground <- 0
+QF$home_ground[QF$Team1 == "Australia"] <- 1
+QF$home_ground[QF$Team2 == "Australia"] <- 1
+head(QF)
+QF$Team1 <- as.factor(QF$Team1)
+QF$Team2 <- as.factor(QF$Team2)
+QF$home_ground <- as.factor(QF$home_ground)
+head(QF)
+colnames(QF) <- c("Date","team1","team2","Round","home_ground")
+QF$team1 <- str_trim(QF$team1)
+QF$team2 <- str_trim(QF$team2)
+```
+
+
+
+```{r}
+QFA1 <- QF[,c(2,3,5)]
+QFA1$home_ground <- factor(QFA1$home_ground,levels = c(0,1))
+QFA1$team1 <- factor(QFA1$team1, levels=c("Afghanistan","Argentina","Australia","Austria","Bahrain","Bangladesh","Belgium","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Greece","Guernsey","Hong Kong","Hungary","ICC World XI","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malawi","Malaysia","Maldives","Malta","Mexico","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Oman","Pakistan","Papua New Guinea","Peru","Philippines","Qatar","Romania","Samoa","Scotland","Singapore","South Africa","Spain","Sri Lanka","Uganda","United Arab Emirates","West Indies","Zimbabwe"
+))
+QFA1$team2 <- factor(QFA1$team2, levels=c("Afghanistan","Argentina","Australia","Austria","Bangladesh","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Hong Kong","Hungary","ICC World XI","Iceland","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malaysia","Maldives","Malta","Mexico","Mozambique","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Norway","Oman","Pakistan","Panama","Papua New Guinea","Philippines","Portugal","Qatar","Saudi Arabia","Scotland","Serbia","Singapore","South Africa","Spain","Sri Lanka","Thailand","Turkey","United Arab Emirates","United States","Vanuatu","West Indies","Zimbabwe"))
+```
+
+```{r}
+dmy <- dummyVars(~team1, data = QFA1)
+trsf1 <- data.frame(predict(dmy, newdata = QFA1))
+dmy <- dummyVars(~team2, data = QFA1)
+trsf2 <- data.frame(predict(dmy, newdata = QFA1))
+QFA1 <- cbind(QFA1,trsf1,trsf2)
+QFA1 <- QFA1[,c(-1,-2)]
+```
+
+```{r}
+predictions <- predict(rf_fit,QFA1)
+QF$predictions <- predictions
+```
+```{r}
+QF1 <- QF %>% filter(QF$Round == "Qualifier A")
+QF1 <- data.frame(table(QF1$predictions))
+QF1 <- QF1 %>% arrange(desc(Freq))
+A1 <- QF1$Var1[1]
+A2 <- QF1$Var1[2]
+QF2 <- QF %>% filter(QF$Round == "Qualifier B")
+QF2 <- data.frame(table(QF2$predictions))
+QF2 <- QF2 %>% arrange(desc(Freq))
+B1 <- QF2$Var1[1]
+B2 <- QF2$Var1[2]
+A1 <- as.character(A1)
+A2 <- as.character(A2)
+B2 <- as.character(B2)
+B1 <- as.character(B1)
+
+```
+Srilanka and Ireland advance to Super12 from Qualifier A
+Bangladesh and Namibia advance to Super12 from Qualifier B
+
+##### Advancing to Super 12 
+```{r}
+QF <- fixtures %>% filter(Round == "Super12-1" | Round == "Super12-2")
+QF[QF$Team1 == "A1",]$Team1 <- A1
+QF[QF$Team1 == "A2",]$Team1 <- A2
+QF[QF$Team2 == "A1",]$Team2 <- A1
+QF[QF$Team2 == "A2",]$Team2 <- A2
+QF[QF$Team2 == "B1",]$Team2 <- B1
+QF[QF$Team2 == "B2",]$Team2 <- B2
+QFA <- QF[,c(2,3)]
+str(QFA)
+QFA$home_ground <- 0
+QFA$home_ground[QFA$Team1 == "Australia"] <- 1
+QFA$home_ground[QFA$Team2 == "Australia"] <- 1
+head(QFA)
+QFA$Team1 <- as.factor(QFA$Team1)
+QFA$Team2 <- as.factor(QFA$Team2)
+QFA$home_ground <- as.factor(QFA$home_ground)
+head(QFA)
+colnames(QFA) <- c("team1","team2","home_ground")
+QFA$team1 <- str_trim(QFA$team1)
+QFA$team2 <- str_trim(QFA$team2)
+```
+
+```{r}
+QFA$home_ground <- factor(QFA$home_ground,levels = c(0,1))
+QFA$team1 <- factor(QFA$team1, levels=c("Afghanistan","Argentina","Australia","Austria","Bahrain","Bangladesh","Belgium","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Greece","Guernsey","Hong Kong","Hungary","ICC World XI","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malawi","Malaysia","Maldives","Malta","Mexico","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Oman","Pakistan","Papua New Guinea","Peru","Philippines","Qatar","Romania","Samoa","Scotland","Singapore","South Africa","Spain","Sri Lanka","Uganda","United Arab Emirates","West Indies","Zimbabwe"
+))
+QFA$team2 <- factor(QFA$team2, levels=c("Afghanistan","Argentina","Australia","Austria","Bangladesh","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Hong Kong","Hungary","ICC World XI","Iceland","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malaysia","Maldives","Malta","Mexico","Mozambique","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Norway","Oman","Pakistan","Panama","Papua New Guinea","Philippines","Portugal","Qatar","Saudi Arabia","Scotland","Serbia","Singapore","South Africa","Spain","Sri Lanka","Thailand","Turkey","United Arab Emirates","United States","Vanuatu","West Indies","Zimbabwe"))
+```
+
+```{r}
+dmy <- dummyVars(~team1, data = QFA)
+trsf1 <- data.frame(predict(dmy, newdata = QFA))
+dmy <- dummyVars(~team2, data = QFA)
+trsf2 <- data.frame(predict(dmy, newdata = QFA))
+QFA <- cbind(QFA,trsf1,trsf2)
+QFA <- QFA[,c(-1,-2)]
+```
+
+```{r}
+predictions <- predict(rf_fit,QFA)
+QF$predictions <- predictions
+```
+
+```{r}
+QF1 <- QF %>% filter(QF$Round == "Super12-1")
+QF1 <- data.frame(table(QF1$predictions))
+QF1 <- QF1 %>% arrange(desc(Freq))
+QF2 <- QF %>% filter(QF$Round == "Super12-2")
+QF2 <- data.frame(table(QF2$predictions))
+QF2 <- QF2 %>% arrange(desc(Freq))
+S1 <- as.character(QF1$Var1[1])
+S2 <- as.character(QF1$Var1[2])
+S3 <- as.character(QF2$Var1[1])
+S4 <- as.character(QF2$Var1[2])
+```
+After Super 12 From Group 1 and Group 2 :
+Australia and Pakistan Advance to Semi finals
+India and England Advance to Semi FInals
+
+Since the stats are not yet out we assume that the first Semifinalist from group 1 play with the second Semifinalist from group 2 
+SO now 
+First Semifinal would be between 
+Australia and England
+Second Semifinal would be between
+India and Pakistan
+
+### Semi Finals
+
+```{r}
+Semis <- data.frame("team1" = c("Australia","Pakistan"),"team2" = c("England","India"), "home_ground" = c(1,0))
+```
+
+```{r}
+QFA <- Semis
+QFA$home_ground <- factor(QFA$home_ground,levels = c(0,1))
+QFA$team1 <- factor(QFA$team1, levels=c("Afghanistan","Argentina","Australia","Austria","Bahrain","Bangladesh","Belgium","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Greece","Guernsey","Hong Kong","Hungary","ICC World XI","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malawi","Malaysia","Maldives","Malta","Mexico","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Oman","Pakistan","Papua New Guinea","Peru","Philippines","Qatar","Romania","Samoa","Scotland","Singapore","South Africa","Spain","Sri Lanka","Uganda","United Arab Emirates","West Indies","Zimbabwe"
+))
+QFA$team2 <- factor(QFA$team2, levels=c("Afghanistan","Argentina","Australia","Austria","Bangladesh","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Hong Kong","Hungary","ICC World XI","Iceland","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malaysia","Maldives","Malta","Mexico","Mozambique","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Norway","Oman","Pakistan","Panama","Papua New Guinea","Philippines","Portugal","Qatar","Saudi Arabia","Scotland","Serbia","Singapore","South Africa","Spain","Sri Lanka","Thailand","Turkey","United Arab Emirates","United States","Vanuatu","West Indies","Zimbabwe"))
+```
+
+```{r}
+dmy <- dummyVars(~team1, data = QFA)
+trsf1 <- data.frame(predict(dmy, newdata = QFA))
+dmy <- dummyVars(~team2, data = QFA)
+trsf2 <- data.frame(predict(dmy, newdata = QFA))
+QFA <- cbind(QFA,trsf1,trsf2)
+QFA <- QFA[,c(-1,-2)]
+```
+
+```{r}
+predictions <- predict(rf_fit,QFA)
+Semis$predictions <- predictions
+```
+
+According to our predictions Australia and India advance to Finals 
+
+```{r}
+final_match <- data.frame("team1" = c("Australia"),"team2" = c("India"), "home_ground" = c(1))
+```
+
+```{r}
+QFA <- final_match
+QFA$home_ground <- factor(QFA$home_ground,levels = c(0,1))
+QFA$team1 <- factor(QFA$team1, levels=c("Afghanistan","Argentina","Australia","Austria","Bahrain","Bangladesh","Belgium","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Greece","Guernsey","Hong Kong","Hungary","ICC World XI","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malawi","Malaysia","Maldives","Malta","Mexico","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Oman","Pakistan","Papua New Guinea","Peru","Philippines","Qatar","Romania","Samoa","Scotland","Singapore","South Africa","Spain","Sri Lanka","Uganda","United Arab Emirates","West Indies","Zimbabwe"
+))
+QFA$team2 <- factor(QFA$team2, levels=c("Afghanistan","Argentina","Australia","Austria","Bangladesh","Belize","Bermuda","Bhutan","Botswana","Brazil","Bulgaria","Canada","Cayman Islands","Chile","Costa Rica","Czech Republic","Denmark","England","Finland","Germany","Ghana","Gibraltar","Hong Kong","Hungary","ICC World XI","Iceland","India","Ireland","Italy","Jersey","Kenya","Kuwait","Luxembourg","Malaysia","Maldives","Malta","Mexico","Mozambique","Namibia","Nepal","Netherlands","New Zealand","Nigeria","Norway","Oman","Pakistan","Panama","Papua New Guinea","Philippines","Portugal","Qatar","Saudi Arabia","Scotland","Serbia","Singapore","South Africa","Spain","Sri Lanka","Thailand","Turkey","United Arab Emirates","United States","Vanuatu","West Indies","Zimbabwe"))
+```
+
+```{r}
+dmy <- dummyVars(~team1, data = QFA)
+trsf1 <- data.frame(predict(dmy, newdata = QFA))
+dmy <- dummyVars(~team2, data = QFA)
+trsf2 <- data.frame(predict(dmy, newdata = QFA))
+QFA <- cbind(QFA,trsf1,trsf2)
+QFA <- QFA[,c(-1,-2)]
+```
+
+```{r}
+predictions <- predict(rf_fit,QFA)
+final_match$predictions <- predictions
+predictions
+```
+India is predicted as the winner 
+
+
+
+
+
+
+
